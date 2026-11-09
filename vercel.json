@@ -9,7 +9,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "frame-ancestors 'self' https://xavieresearch.com https://www.xavieresearch.com https://*.xavieresearch.com https://*.vercel.app"
+          "value": "frame-ancestors 'self' https://xavierresearch.com https://www.xavierresearch.com https://*.xavierresearch.com https://*.vercel.app"
         }
       ]
     }
