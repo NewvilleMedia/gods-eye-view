@@ -13,6 +13,7 @@
 
 import * as Cesium from 'cesium';
 import { announceNavigationAuthority } from '../navigationPolicy.js';
+import { setScopeMaskEnabled } from '../scopeMask.js';
 import { annotationsFromParams, createView } from '../view/index.js';
 
 const EMBED_VIEW_MESSAGE = 'gev:view';
@@ -265,6 +266,10 @@ export function installViews({
 
   windowRef.document.body.classList.add('ui-embed');
   shell.setCleanView?.(true);
+  // Amber embed: disable the signature scope mask (radial vignette) so the
+  // host owns the viewport rectangle. The host (Amber) renders its own chrome
+  // around the globe and does not want a circular keyhole over city imagery.
+  try { setScopeMaskEnabled(false); } catch { /* mask not yet mounted */ }
   const stopRendering = isEmbeddedInline()
     ? keepPanelRendering(viewer, { windowRef })
     : () => {};
@@ -289,7 +294,28 @@ export function installViews({
         : event.origin;
     let view;
     try {
-      view = createView(event.data.view);
+      // Amber-embed patch: if the parent sent a view WITHOUT camera, fill in
+      // the viewer's current camera position so layer-only / layer-toggle
+      // updates preserve whatever the user is looking at (including manual
+      // drags/scrolls the parent couldn't track). Without this, the parent
+      // would have to pass a camera every time, which caused layer toggles
+      // to snap the globe back to a stale default.
+      const incoming = event.data.view ?? {};
+      let viewInput = incoming;
+      if (!incoming || !incoming.camera || !Number.isFinite(incoming.camera?.lat) || !Number.isFinite(incoming.camera?.lon)) {
+        try {
+          const pos = viewer?.camera?.positionCartographic;
+          if (pos) {
+            const lat = Cesium.Math.toDegrees(pos.latitude);
+            const lon = Cesium.Math.toDegrees(pos.longitude);
+            const alt = pos.height;
+            const heading = viewer.camera.heading ? Cesium.Math.toDegrees(viewer.camera.heading) : 0;
+            const pitch = viewer.camera.pitch ? Cesium.Math.toDegrees(viewer.camera.pitch) : -90;
+            viewInput = { ...incoming, camera: { lat, lon, altitude_m: alt, heading_deg: heading, pitch_deg: pitch } };
+          }
+        } catch { /* fall through to createView, which will throw if camera is still missing */ }
+      }
+      view = createView(viewInput);
     } catch (error) {
       post(
         {
